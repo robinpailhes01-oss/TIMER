@@ -627,8 +627,188 @@ input { font-family: inherit; }
 .tab--center svg { width: 22px; height: 22px; }
 .tab--center.active { background: linear-gradient(135deg, var(--orange-1), var(--orange-3)); border-color: var(--nav-bg); color: #fff; }
 
+/* ===== Side panel (tablet+) ===== */
+.side-panel { display: none; }
+
 /* small screens */
 @media (max-width: 360px) {
   .timer-wrap { width: 220px; height: 220px; }
   .timer-value { font-size: 40px; }
+}
+
+/* ============================================================
+   TABLET (≥ 768px) — multi-panel layout
+   ============================================================ */
+@media (min-width: 768px) {
+  body {
+    display: block;
+    padding: 0;
+    background:
+      radial-gradient(140% 90% at 100% 0%, #ffd9b8 0%, transparent 55%),
+      linear-gradient(160deg, #ffe7d2 0%, #f7c69a 100%);
+  }
+
+  .phone {
+    width: 100vw;
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    grid-template-rows: 1fr;
+    gap: 0;
+  }
+
+  /* All screens stack into the main column */
+  .screen {
+    position: relative;
+    inset: auto;
+    grid-column: 1;
+    grid-row: 1;
+    padding: 36px 36px calc(var(--tab-h) + 36px) 36px;
+    max-width: none;
+    overflow-y: auto;
+  }
+  .screen.active { display: flex; }
+
+  /* Side panel — always visible on tablet */
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    grid-column: 2;
+    grid-row: 1;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-left: 1px solid rgba(255, 255, 255, 0.6);
+    padding: 32px 22px calc(var(--tab-h) + 32px);
+    overflow-y: auto;
+    gap: 14px;
+  }
+  .side-panel::-webkit-scrollbar { width: 0; }
+  .side-panel__head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .side-panel__title { font-weight: 800; font-size: 18px; letter-spacing: -0.01em; }
+  .side-panel__sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .add-btn--sm { width: 40px; height: 40px; border-radius: 12px; }
+  .add-btn--sm svg { width: 18px; height: 18px; }
+  .side-add {
+    display: flex; flex-direction: column; gap: 8px;
+    background: var(--card);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    box-shadow: var(--shadow-soft);
+  }
+  .side-panel .task-list { gap: 8px; }
+  .side-panel .task-item {
+    padding: 12px;
+    border-radius: 16px;
+    grid-template-columns: 24px 1fr auto;
+    gap: 10px;
+  }
+  .side-panel .task-item .task-del { display: none; }
+  .side-panel .task-item.active { box-shadow: 0 0 0 2px var(--orange-2), var(--shadow-soft); }
+  .side-panel__empty {
+    display: none;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 24px 8px;
+  }
+  .side-panel__empty.show { display: block; }
+
+  /* Larger cards / centered timer */
+  .timer-wrap { width: 280px; height: 280px; }
+  .timer-value { font-size: 54px; }
+  .timer-card { max-width: 560px; align-self: center; width: 100%; }
+  .task-card { max-width: 560px; align-self: center; width: 100%; }
+
+  /* Home becomes a vertical stack but centered in main col */
+  .screen--home { align-items: center; }
+  .screen--home > .topbar { width: 100%; max-width: 720px; }
+
+  /* Tasks screen: 2-column grid for items */
+  .screen--tasks .task-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .screen--tasks .add-card { max-width: 720px; }
+
+  /* Stats: chart spans wider, stat row 4 columns */
+  .screen--stats .stat-row { grid-template-columns: repeat(2, 1fr); max-width: 720px; }
+  .screen--stats .chart { height: 240px; }
+  .screen--stats .chart-card { max-width: 900px; }
+  .screen--stats .recent-card { max-width: 900px; }
+
+  /* Profile: 2 columns */
+  .screen--profile {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  .screen--profile.active { display: grid; }
+  .screen--profile .topbar--simple { grid-column: 1 / -1; }
+  .screen--profile .profile-card { grid-column: 1 / -1; }
+
+  /* Bottom nav: span full main col, anchored to main col only */
+  .tabbar {
+    bottom: 24px;
+    left: calc(50% - 180px);
+    transform: none;
+  }
+}
+
+/* ============================================================
+   LARGE TABLET / DESKTOP (≥ 1100px) — sidebar nav + 3 zones
+   ============================================================ */
+@media (min-width: 1100px) {
+  .phone {
+    grid-template-columns: 96px 1fr 400px;
+    max-width: 1400px;
+    margin: 0 auto;
+    box-shadow: 0 0 80px rgba(180, 90, 20, 0.08);
+  }
+
+  .screen { grid-column: 2; padding: 44px 44px 44px; }
+  .side-panel { grid-column: 3; padding: 40px 28px; }
+
+  /* Sidebar nav (rail) */
+  .tabbar {
+    position: relative;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    margin: 36px 0 0 24px;
+    flex-direction: column;
+    bottom: auto; left: auto; transform: none;
+    padding: 12px 8px;
+    border-radius: 36px;
+    gap: 6px;
+    height: fit-content;
+  }
+  .tab--center { margin: 4px 0; }
+
+  /* Bigger headline cards */
+  .timer-wrap { width: 320px; height: 320px; }
+  .timer-value { font-size: 60px; }
+
+  .screen--home { align-items: stretch; }
+  .screen--home > .topbar { max-width: none; }
+  .timer-card, .task-card { max-width: 640px; margin-left: auto; margin-right: auto; }
+}
+
+/* ============================================================
+   LANDSCAPE PHONE — keep mobile layout but tighten
+   ============================================================ */
+@media (max-width: 767px) and (orientation: landscape) and (max-height: 480px) {
+  .timer-wrap { width: 180px; height: 180px; }
+  .timer-value { font-size: 32px; }
+  .ctrl--play { width: 52px; height: 52px; }
 }

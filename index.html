@@ -3,8 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#fbe6d4" />
+  <meta name="theme-color" content="#ff7a2b" />
+  <meta name="description" content="FocusFlow — timer Pomodoro et todo list pour rester concentré." />
   <title>FocusFlow — Productivité</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="FocusFlow" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -258,6 +267,33 @@
         <button class="upgrade-btn">Passer à FocusFlow+</button>
       </div>
     </section>
+
+    <!-- ========================= TABLET SIDE PANEL (tasks) ========================= -->
+    <aside class="side-panel" aria-label="Tâches">
+      <div class="side-panel__head">
+        <div>
+          <div class="side-panel__title">Mes tâches</div>
+          <div class="side-panel__sub" id="sideSubCount">0 active(s)</div>
+        </div>
+        <button class="add-btn add-btn--sm" id="sideAddBtn" aria-label="Nouvelle tâche">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <form id="sideAddForm" class="side-add" hidden>
+        <input id="sideTaskInput" class="add-input" type="text" placeholder="Nouvelle tâche…" maxlength="80" required />
+        <div class="add-row">
+          <label class="pill-input"><span>Sessions</span><input id="sideTaskSessions" type="number" min="1" max="20" value="2" /></label>
+          <label class="pill-input"><span>Min</span><input id="sideTaskDuration" type="number" min="5" max="90" step="5" value="25" /></label>
+          <button class="add-btn" type="submit" aria-label="Ajouter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </form>
+      <ul class="task-list" id="taskListSide"></ul>
+      <div class="side-panel__empty" id="sideEmpty">
+        <p>Aucune tâche. Cliquez sur + pour commencer.</p>
+      </div>
+    </aside>
 
     <!-- ========================= BOTTOM NAV ========================= -->
     <nav class="tabbar">

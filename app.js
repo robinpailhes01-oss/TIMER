@@ -226,6 +226,34 @@ addForm.addEventListener('submit', e => {
   renderHomeCurrent();
 });
 
+// Side panel quick-add (tablet)
+const sideAddBtn = document.getElementById('sideAddBtn');
+const sideAddForm = document.getElementById('sideAddForm');
+if (sideAddBtn && sideAddForm) {
+  sideAddBtn.addEventListener('click', () => {
+    sideAddForm.hidden = !sideAddForm.hidden;
+    if (!sideAddForm.hidden) document.getElementById('sideTaskInput').focus();
+  });
+  sideAddForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const title = document.getElementById('sideTaskInput').value.trim();
+    if (!title) return;
+    const sessions = clamp(parseInt(document.getElementById('sideTaskSessions').value, 10) || 1, 1, 20);
+    const duration = clamp(parseInt(document.getElementById('sideTaskDuration').value, 10) || 25, 5, 90);
+    state.tasks.unshift({
+      id: crypto.randomUUID(),
+      title, totalSessions: sessions, completedSessions: 0,
+      sessionMinutes: duration, done: false, createdAt: Date.now(),
+    });
+    if (!state.activeTaskId) state.activeTaskId = state.tasks[0].id;
+    save();
+    document.getElementById('sideTaskInput').value = '';
+    sideAddForm.hidden = true;
+    renderTasks();
+    renderHomeCurrent();
+  });
+}
+
 document.getElementById('clearDone').addEventListener('click', () => {
   state.tasks = state.tasks.filter(t => !t.done);
   save();
@@ -246,6 +274,17 @@ function renderTasks() {
 
   taskList.querySelectorAll('.task-item').forEach(bind);
   doneList.querySelectorAll('.task-item').forEach(bind);
+
+  // tablet side panel
+  const sideList = document.getElementById('taskListSide');
+  const sideEmpty = document.getElementById('sideEmpty');
+  const sideSub = document.getElementById('sideSubCount');
+  if (sideList) {
+    sideList.innerHTML = todo.map(taskRow).join('') + done.slice(0, 3).map(taskRow).join('');
+    sideList.querySelectorAll('.task-item').forEach(bind);
+    sideEmpty.classList.toggle('show', state.tasks.length === 0);
+    sideSub.textContent = `${todo.length} active${todo.length > 1 ? 's' : ''}`;
+  }
 }
 
 function taskRow(t) {
