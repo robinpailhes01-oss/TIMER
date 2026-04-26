@@ -43,19 +43,20 @@
         </button>
       </header>
 
-      <div class="card task-card" id="currentTaskCard">
+      <button class="card task-card" id="currentTaskCard" type="button">
         <div class="task-card__icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         </div>
         <div class="task-card__body">
-          <div class="task-card__title" id="currentTaskTitle">Apprendre UI Design</div>
-          <div class="task-card__meta"><span id="currentTaskMinutes">120</span> minutes</div>
+          <div class="task-card__title" id="currentTaskTitle">Choisir une tâche</div>
+          <div class="task-card__meta" id="currentTaskMeta">Touchez pour sélectionner</div>
+          <div class="task-card__bar"><div class="task-card__fill" id="currentTaskFill"></div></div>
         </div>
         <div class="task-card__progress">
-          <div class="task-card__count"><span id="currentTaskDone">2</span>/<span id="currentTaskTotal">4</span></div>
-          <div class="task-card__sub"><span id="currentTaskSession">25</span> minutes</div>
+          <div class="task-card__count"><span id="currentTaskSpent">0</span>/<span id="currentTaskEst">0</span></div>
+          <div class="task-card__sub">min</div>
         </div>
-      </div>
+      </button>
 
       <div class="card timer-card">
         <div class="timer-head">
@@ -100,9 +101,10 @@
         </div>
 
         <div class="timer-modes">
-          <button class="mode active" data-mode="focus" data-minutes="25">Focus · 25</button>
-          <button class="mode" data-mode="short" data-minutes="5">Pause · 5</button>
-          <button class="mode" data-mode="long" data-minutes="15">Longue · 15</button>
+          <button class="mode mode--task" id="modeTaskBtn" data-mode="task" hidden>Tâche · 25</button>
+          <button class="mode active" data-mode="focus">Focus · 25</button>
+          <button class="mode" data-mode="short">Pause · 5</button>
+          <button class="mode" data-mode="long">Longue · 15</button>
         </div>
       </div>
     </section>
@@ -123,14 +125,16 @@
         <form id="addTaskForm" class="add-form">
           <input id="taskInput" class="add-input" type="text" placeholder="Ajouter une tâche…" maxlength="80" required />
           <div class="add-row">
-            <label class="pill-input">
-              <span>Sessions</span>
-              <input id="taskSessions" type="number" min="1" max="20" value="2" />
+            <label class="pill-input pill-input--wide">
+              <span>Durée estimée (min)</span>
+              <input id="taskEstimated" type="number" min="5" max="240" step="5" value="25" />
             </label>
-            <label class="pill-input">
-              <span>Min/session</span>
-              <input id="taskDuration" type="number" min="5" max="90" step="5" value="25" />
-            </label>
+            <div class="quick-durations" role="group" aria-label="Durées rapides">
+              <button type="button" class="qd" data-min="15">15</button>
+              <button type="button" class="qd active" data-min="25">25</button>
+              <button type="button" class="qd" data-min="45">45</button>
+              <button type="button" class="qd" data-min="60">60</button>
+            </div>
             <button class="add-btn" type="submit" aria-label="Ajouter">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
             </button>
@@ -282,8 +286,7 @@
       <form id="sideAddForm" class="side-add" hidden>
         <input id="sideTaskInput" class="add-input" type="text" placeholder="Nouvelle tâche…" maxlength="80" required />
         <div class="add-row">
-          <label class="pill-input"><span>Sessions</span><input id="sideTaskSessions" type="number" min="1" max="20" value="2" /></label>
-          <label class="pill-input"><span>Min</span><input id="sideTaskDuration" type="number" min="5" max="90" step="5" value="25" /></label>
+          <label class="pill-input pill-input--wide"><span>Durée estimée (min)</span><input id="sideTaskEstimated" type="number" min="5" max="240" step="5" value="25" /></label>
           <button class="add-btn" type="submit" aria-label="Ajouter">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
           </button>
@@ -313,6 +316,28 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
       </button>
     </nav>
+  </div>
+
+  <!-- ========================= TASK PICKER MODAL ========================= -->
+  <div class="picker" id="taskPicker" hidden aria-hidden="true">
+    <div class="picker__backdrop" data-picker-close></div>
+    <div class="picker__sheet" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+      <div class="picker__handle" aria-hidden="true"></div>
+      <div class="picker__head">
+        <div>
+          <h2 id="pickerTitle">Choisir une tâche</h2>
+          <p>Le timer prendra automatiquement sa durée estimée.</p>
+        </div>
+        <button class="icon-btn" data-picker-close aria-label="Fermer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <ul class="picker__list" id="pickerList"></ul>
+      <button class="picker__none" id="pickerNone">
+        <span>Pas de tâche · session libre</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
   </div>
 
   <audio id="dingSound" preload="auto" src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAAAAAA=="></audio>

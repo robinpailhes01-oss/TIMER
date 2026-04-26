@@ -11,11 +11,27 @@ const defaultStore = () => ({
   activeTaskId: null,
 });
 
+const migrateTask = t => {
+  // Old shape: { totalSessions, sessionMinutes, completedSessions }
+  // New shape: { estimatedMinutes, spentMinutes }
+  if (typeof t.estimatedMinutes !== 'number') {
+    const total = (t.totalSessions || 1) * (t.sessionMinutes || 25);
+    t.estimatedMinutes = total;
+  }
+  if (typeof t.spentMinutes !== 'number') {
+    t.spentMinutes = (t.completedSessions || 0) * (t.sessionMinutes || 25);
+  }
+  delete t.totalSessions; delete t.sessionMinutes; delete t.completedSessions;
+  return t;
+};
+
 const load = () => {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return defaultStore();
-    return { ...defaultStore(), ...JSON.parse(raw) };
+    const data = { ...defaultStore(), ...JSON.parse(raw) };
+    data.tasks = (data.tasks || []).map(migrateTask);
+    return data;
   } catch { return defaultStore(); }
 };
 const save = () => localStorage.setItem(STORE_KEY, JSON.stringify(state));
@@ -72,28 +88,57 @@ let timer = {
   startedAt: null,
 };
 
+function activeTask() {
+  return state.tasks.find(t => t.id === state.activeTaskId && !t.done);
+}
+function taskRemainingMinutes(t) {
+  return Math.max(5, Math.ceil(t.estimatedMinutes - (t.spentMinutes || 0)));
+}
 function modeMinutes(mode) {
+  if (mode === 'task') {
+    const t = activeTask();
+    return t ? taskRemainingMinutes(t) : state.settings.focus;
+  }
   return mode === 'focus' ? state.settings.focus
        : mode === 'short' ? state.settings.short
        : state.settings.long;
 }
-function modeLabel(mode) {
-  return mode === 'focus' ? 'Focus' : mode === 'short' ? 'Pause courte' : 'Pause longue';
-}
 function modeHint(mode) {
   const m = modeMinutes(mode);
+  if (mode === 'task') {
+    const t = activeTask();
+    return t ? `Concentrez-vous sur « ${t.title} » · ${m} min` : `Restez concentré pendant ${m} min`;
+  }
   return mode === 'focus'
     ? `Restez concentré pendant ${m} min`
     : `Détendez-vous pendant ${m} min`;
 }
 
 function setMode(mode, opts = { resetTimer: true }) {
+  if (timer.running) return; // can't switch while running
+  if (mode === 'task' && !activeTask()) mode = 'focus';
   timer.mode = mode;
   timer.durationSec = modeMinutes(mode) * 60;
   if (opts.resetTimer) timer.remainingSec = timer.durationSec;
   modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   timerHintEl.textContent = modeHint(mode);
+  renderTaskModePill();
   renderTimer();
+}
+
+function renderTaskModePill() {
+  const btn = document.getElementById('modeTaskBtn');
+  const t = activeTask();
+  if (!btn) return;
+  if (t) {
+    const m = taskRemainingMinutes(t);
+    const title = t.title.length > 14 ? t.title.slice(0, 13) + '…' : t.title;
+    btn.textContent = `${title} · ${m} min`;
+    btn.hidden = false;
+  } else {
+    btn.hidden = true;
+    if (timer.mode === 'task') setMode('focus');
+  }
 }
 
 function renderTimer() {
@@ -142,8 +187,8 @@ function tick() {
 }
 function finishSession() {
   pauseTimer();
-  // record
   const task = state.tasks.find(t => t.id === state.activeTaskId);
+  const wasWorkMode = timer.mode === 'focus' || timer.mode === 'task';
   state.sessions.push({
     id: crypto.randomUUID(),
     mode: timer.mode,
@@ -152,9 +197,9 @@ function finishSession() {
     taskId: task?.id || null,
     taskTitle: task?.title || null,
   });
-  if (timer.mode === 'focus' && task) {
-    task.completedSessions = Math.min((task.completedSessions || 0) + 1, task.totalSessions);
-    if (task.completedSessions >= task.totalSessions) task.done = true;
+  if (wasWorkMode && task) {
+    task.spentMinutes = (task.spentMinutes || 0) + Math.round(timer.durationSec / 60);
+    if (task.spentMinutes >= task.estimatedMinutes) task.done = true;
   }
   save();
 
@@ -162,14 +207,15 @@ function finishSession() {
   if (state.settings.vibrate && 'vibrate' in navigator) navigator.vibrate([180, 80, 180]);
   flashScreen();
 
-  // auto-cycle: focus -> short, after 4 focus -> long
-  const focusCount = state.sessions.filter(s => s.mode === 'focus' && sameDay(s.finishedAt, Date.now())).length;
-  if (timer.mode === 'focus') {
-    setMode(focusCount % 4 === 0 ? 'long' : 'short');
+  // auto-cycle: work -> short, every 4 work sessions -> long; break -> back to task/focus
+  const workCount = state.sessions.filter(s => (s.mode === 'focus' || s.mode === 'task') && sameDay(s.finishedAt, Date.now())).length;
+  if (wasWorkMode) {
+    setMode(workCount % 4 === 0 ? 'long' : 'short');
   } else {
-    setMode('focus');
+    setMode(activeTask() ? 'task' : 'focus');
   }
   renderHomeCurrent();
+  renderTasks();
 }
 function flashScreen() {
   document.body.animate(
@@ -181,18 +227,18 @@ function flashScreen() {
 btnPlay.addEventListener('click', () => timer.running ? pauseTimer() : startTimer());
 btnReset.addEventListener('click', resetTimer);
 btnSkip.addEventListener('click', () => {
-  // skip current session — count it only if more than 30s elapsed in focus mode
-  if (timer.mode === 'focus' && (timer.durationSec - timer.remainingSec) > 30) {
+  const wasWorkMode = timer.mode === 'focus' || timer.mode === 'task';
+  if (wasWorkMode && (timer.durationSec - timer.remainingSec) > 30) {
     timer.remainingSec = 0;
     finishSession();
   } else {
     pauseTimer();
-    // jump to next mode without recording
-    setMode(timer.mode === 'focus' ? 'short' : 'focus');
+    setMode(wasWorkMode ? 'short' : (activeTask() ? 'task' : 'focus'));
   }
 });
 modeBtns.forEach(b => b.addEventListener('click', () => {
-  if (timer.running) return; // don't switch while running
+  if (timer.running) return;
+  if (b.dataset.mode === 'task' && !activeTask()) { openPicker(); return; }
   setMode(b.dataset.mode);
 }));
 
@@ -208,14 +254,12 @@ addForm.addEventListener('submit', e => {
   e.preventDefault();
   const title = document.getElementById('taskInput').value.trim();
   if (!title) return;
-  const sessions = clamp(parseInt(document.getElementById('taskSessions').value, 10) || 1, 1, 20);
-  const duration = clamp(parseInt(document.getElementById('taskDuration').value, 10) || 25, 5, 90);
+  const estimated = clamp(parseInt(document.getElementById('taskEstimated').value, 10) || 25, 5, 240);
   state.tasks.unshift({
     id: crypto.randomUUID(),
     title,
-    totalSessions: sessions,
-    completedSessions: 0,
-    sessionMinutes: duration,
+    estimatedMinutes: estimated,
+    spentMinutes: 0,
     done: false,
     createdAt: Date.now(),
   });
@@ -224,6 +268,22 @@ addForm.addEventListener('submit', e => {
   document.getElementById('taskInput').value = '';
   renderTasks();
   renderHomeCurrent();
+  renderTaskModePill();
+});
+
+// Quick duration chips sync with the estimated input
+document.querySelectorAll('.quick-durations .qd').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.quick-durations .qd').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    document.getElementById('taskEstimated').value = chip.dataset.min;
+  });
+});
+document.getElementById('taskEstimated').addEventListener('input', e => {
+  const v = parseInt(e.target.value, 10);
+  document.querySelectorAll('.quick-durations .qd').forEach(c => {
+    c.classList.toggle('active', parseInt(c.dataset.min, 10) === v);
+  });
 });
 
 // Side panel quick-add (tablet)
@@ -238,12 +298,11 @@ if (sideAddBtn && sideAddForm) {
     e.preventDefault();
     const title = document.getElementById('sideTaskInput').value.trim();
     if (!title) return;
-    const sessions = clamp(parseInt(document.getElementById('sideTaskSessions').value, 10) || 1, 1, 20);
-    const duration = clamp(parseInt(document.getElementById('sideTaskDuration').value, 10) || 25, 5, 90);
+    const estimated = clamp(parseInt(document.getElementById('sideTaskEstimated').value, 10) || 25, 5, 240);
     state.tasks.unshift({
       id: crypto.randomUUID(),
-      title, totalSessions: sessions, completedSessions: 0,
-      sessionMinutes: duration, done: false, createdAt: Date.now(),
+      title, estimatedMinutes: estimated, spentMinutes: 0,
+      done: false, createdAt: Date.now(),
     });
     if (!state.activeTaskId) state.activeTaskId = state.tasks[0].id;
     save();
@@ -251,6 +310,7 @@ if (sideAddBtn && sideAddForm) {
     sideAddForm.hidden = true;
     renderTasks();
     renderHomeCurrent();
+    renderTaskModePill();
   });
 }
 
@@ -290,6 +350,7 @@ function renderTasks() {
 function taskRow(t) {
   const active = t.id === state.activeTaskId ? 'active' : '';
   const checked = t.done ? 'checked' : '';
+  const spent = Math.min(t.spentMinutes || 0, t.estimatedMinutes);
   return `
     <li class="task-item ${t.done ? 'done' : ''} ${active}" data-id="${t.id}">
       <button class="task-check ${checked}" aria-label="Cocher">
@@ -297,9 +358,9 @@ function taskRow(t) {
       </button>
       <div>
         <div class="task-item__title">${escape(t.title)}</div>
-        <div class="task-item__meta">${t.totalSessions * t.sessionMinutes} min · ${t.sessionMinutes} min/session</div>
+        <div class="task-item__meta">${spent} / ${t.estimatedMinutes} min</div>
       </div>
-      <span class="task-item__sessions">${t.completedSessions}/${t.totalSessions}</span>
+      <span class="task-item__sessions">${t.estimatedMinutes} min</span>
       <button class="task-del" aria-label="Supprimer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
       </button>
@@ -334,39 +395,109 @@ function deleteTask(id) {
   }
   save(); renderTasks(); renderHomeCurrent();
 }
-function selectTask(id) {
+function selectTask(id, { navigateHome = true } = {}) {
   const t = state.tasks.find(x => x.id === id);
   if (!t || t.done) return;
   state.activeTaskId = id;
   save();
   renderTasks();
   renderHomeCurrent();
-  navigate('home');
+  // auto-set the timer to this task's remaining time
+  if (!timer.running) setMode('task', { resetTimer: true });
+  else renderTaskModePill();
+  if (navigateHome) navigate('home');
 }
 
 /* ============================== HOME CURRENT TASK ============================== */
 function renderHomeCurrent() {
-  const t = state.tasks.find(x => x.id === state.activeTaskId && !x.done)
-         || state.tasks.find(x => !x.done);
+  const t = state.tasks.find(x => x.id === state.activeTaskId && !x.done);
   const card = document.getElementById('currentTaskCard');
+  const title = document.getElementById('currentTaskTitle');
+  const meta = document.getElementById('currentTaskMeta');
+  const fill = document.getElementById('currentTaskFill');
+  const spentEl = document.getElementById('currentTaskSpent');
+  const estEl = document.getElementById('currentTaskEst');
+
   if (!t) {
-    document.getElementById('currentTaskTitle').textContent = 'Aucune tâche active';
-    document.getElementById('currentTaskMinutes').textContent = '0';
-    document.getElementById('currentTaskDone').textContent = '0';
-    document.getElementById('currentTaskTotal').textContent = '0';
-    document.getElementById('currentTaskSession').textContent = state.settings.focus;
-    card.style.opacity = 0.7;
+    title.textContent = 'Choisir une tâche';
+    meta.textContent = state.tasks.some(x => !x.done) ? 'Touchez pour sélectionner' : 'Aucune tâche — touchez pour en créer';
+    fill.style.width = '0%';
+    spentEl.textContent = '0';
+    estEl.textContent = '0';
+    card.classList.add('task-card--empty');
     return;
   }
-  card.style.opacity = 1;
-  document.getElementById('currentTaskTitle').textContent = t.title;
-  document.getElementById('currentTaskMinutes').textContent = t.totalSessions * t.sessionMinutes;
-  document.getElementById('currentTaskDone').textContent = t.completedSessions;
-  document.getElementById('currentTaskTotal').textContent = t.totalSessions;
-  document.getElementById('currentTaskSession').textContent = t.sessionMinutes;
-  state.activeTaskId = t.id;
+  card.classList.remove('task-card--empty');
+  const spent = Math.min(t.spentMinutes || 0, t.estimatedMinutes);
+  const remaining = Math.max(0, t.estimatedMinutes - spent);
+  title.textContent = t.title;
+  meta.textContent = `${remaining} min restantes · timer auto`;
+  fill.style.width = (t.estimatedMinutes ? (spent / t.estimatedMinutes) * 100 : 0) + '%';
+  spentEl.textContent = spent;
+  estEl.textContent = t.estimatedMinutes;
 }
-document.getElementById('currentTaskCard').addEventListener('click', () => navigate('tasks'));
+document.getElementById('currentTaskCard').addEventListener('click', () => {
+  if (state.tasks.some(x => !x.done)) openPicker();
+  else navigate('tasks');
+});
+
+/* ============================== TASK PICKER ============================== */
+const picker = document.getElementById('taskPicker');
+const pickerList = document.getElementById('pickerList');
+const pickerNoneBtn = document.getElementById('pickerNone');
+
+function openPicker() {
+  renderPicker();
+  picker.hidden = false;
+  picker.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+function closePicker() {
+  picker.hidden = true;
+  picker.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+function renderPicker() {
+  const todo = state.tasks.filter(t => !t.done);
+  if (todo.length === 0) {
+    pickerList.innerHTML = `<div class="picker__empty">Aucune tâche active. Ajoutez-en une pour commencer.</div>`;
+  } else {
+    pickerList.innerHTML = todo.map(t => {
+      const spent = Math.min(t.spentMinutes || 0, t.estimatedMinutes);
+      const pct = t.estimatedMinutes ? (spent / t.estimatedMinutes) * 100 : 0;
+      const remaining = Math.max(0, t.estimatedMinutes - spent);
+      const active = t.id === state.activeTaskId ? 'active' : '';
+      return `
+        <li class="picker-item ${active}" data-id="${t.id}">
+          <div>
+            <div class="picker-item__title">${escape(t.title)}</div>
+            <div class="picker-item__meta">${spent} / ${t.estimatedMinutes} min · ${remaining} min restantes</div>
+          </div>
+          <div class="picker-item__time">${remaining || t.estimatedMinutes} min</div>
+          <div class="picker-item__bar"><div class="picker-item__fill" style="width:${pct}%"></div></div>
+        </li>`;
+    }).join('');
+    pickerList.querySelectorAll('.picker-item').forEach(li => {
+      li.addEventListener('click', () => {
+        selectTask(li.dataset.id, { navigateHome: false });
+        closePicker();
+      });
+    });
+  }
+}
+document.querySelectorAll('[data-picker-close]').forEach(el => el.addEventListener('click', closePicker));
+pickerNoneBtn.addEventListener('click', () => {
+  state.activeTaskId = null;
+  save();
+  renderTasks();
+  renderHomeCurrent();
+  if (!timer.running) setMode('focus');
+  renderTaskModePill();
+  closePicker();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !picker.hidden) closePicker();
+});
 
 /* ============================== STATS ============================== */
 function sameDay(a, b) {
@@ -500,9 +631,10 @@ function escape(str) {
 function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 
 /* ============================== INIT ============================== */
-setMode('focus', { resetTimer: true });
 renderTasks();
 renderHomeCurrent();
+renderTaskModePill();
+setMode(activeTask() ? 'task' : 'focus', { resetTimer: true });
 
 // keyboard: space toggles play/pause when on home
 document.addEventListener('keydown', e => {
